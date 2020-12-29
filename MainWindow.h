@@ -2,8 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QFrame>
-#include <QLabel>
+#include "GstDisplay.h"
 
 //-------------------------------------------------------------------------------------------------
 QT_BEGIN_NAMESPACE
@@ -41,6 +40,7 @@ private:
     Ui::MainWindow* ui;
 
     PaintEventFilter* paintEventFilter;
+    GstDisplay* gstDisplay;
 
 private slots:
     void OnPainted(QImage image);

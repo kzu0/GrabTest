@@ -26,14 +26,17 @@ bool PaintEventFilter::eventFilter(QObject* obj, QEvent* event) {
 }
 
 //-------------------------------------------------------------------------------------------------
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow), paintEventFilter(nullptr), gstDisplay(nullptr) {
 
     ui->setupUi(this);
     ui->renderLabel->setScaledContents(true);
 
-    paintEventFilter = nullptr;
     paintEventFilter = new PaintEventFilter(this, ui->sourceWidget);
     connect(paintEventFilter, SIGNAL(painted(QImage)), this, SLOT(OnPainted(QImage)));
+
+    gstDisplay = new GstDisplay(this);
+    gstDisplay->InstantiatePipeline();
+    connect(paintEventFilter, SIGNAL(painted(QImage)), gstDisplay, SLOT(OnPainted(QImage)));
 
     ui->sourceFrame->installEventFilter(paintEventFilter);
 }
