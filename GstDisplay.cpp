@@ -1,10 +1,7 @@
 #include "GstDisplay.h"
 #include <QDebug>
 
-#include <gst/video/video.h>
 
-
-QImage* image_ptr;
 
 
 
@@ -29,41 +26,18 @@ static void ChangeStateHandler (GstElement* pipeline, GstState* stateNewPtr) {
 
 
 
-static void NeedDataHandler (GstElement *appsrc) {
-
-    GstBuffer *buffer;
-    GstFlowReturn ret;
-
-    /* Create a new empty buffer */
-    buffer = gst_buffer_new_and_alloc (300*300*4);
-
-    /* Push the buffer into the appsrc */
-    g_signal_emit_by_name (appsrc, "push-buffer", buffer, &ret);
-
-    /* Free the buffer now that we are done with it */
-    gst_buffer_unref (buffer);
-
-    if (ret != GST_FLOW_OK) {
-        /* We got some error, stop sending data */
-        qDebug() << "Error!";
-    }
-}
-
-
 
 //-------------------------------------------------------------------------------------------------
 GstDisplay::GstDisplay(QObject *parent) : QObject(parent) {
 
     data.pipeline = NULL;
 
-    data.filesrc = NULL;
-    data.decodebin = NULL;
-    data.audioconvert = NULL;
+    data.appsrc = NULL;
+    data.identity = NULL;
+    data.videoconvert = NULL;
     data.videosink = NULL;
 
     data.pOwner = this;
-
-    busWatchId = -1;
 }
 
 
@@ -83,37 +57,49 @@ void GstDisplay::InstantiatePipeline() {
 
         data.pipeline = gst_pipeline_new ("pipeline");
 
-        data.filesrc = gst_element_factory_make("appsrc", NULL);
-        data.decodebin = gst_element_factory_make("identity", NULL);
-        data.audioconvert = gst_element_factory_make("videoconvert", NULL);
+        data.appsrc = gst_element_factory_make("appsrc", NULL);
+        data.identity = gst_element_factory_make("queue", NULL);
+        data.videoconvert = gst_element_factory_make("videoconvert", NULL);
         data.videosink = gst_element_factory_make("autovideosink", NULL);
 
-        if (!data.pipeline || !data.filesrc || !data.decodebin || !data.audioconvert || !data.videosink) {
+        if (!data.pipeline || !data.appsrc || !data.identity || !data.videoconvert || !data.videosink) {
             qWarning() << "Not all elements could be created!";
             DisposePipeline();
             return;
         }
 
-        gst_bin_add_many (GST_BIN(data.pipeline), data.filesrc, data.decodebin, data.audioconvert, data.videosink, (char*)NULL);
+        gst_bin_add_many (GST_BIN(data.pipeline), data.appsrc, data.identity, data.videoconvert, data.videosink, (char*)NULL);
 
         // Link the pipeline
-        if (!gst_element_link_many (data.filesrc, data.decodebin, data.audioconvert, data.videosink, (char*)NULL)) {
+        if (!gst_element_link_many (data.appsrc, data.identity, data.videoconvert, data.videosink, (char*)NULL)) {
             qWarning() << "Error: not all elements could be linked!";
             DisposePipeline();
             return;
         }
 
         /* setup appsrc */
-        GstVideoInfo info;
-        GstCaps *video_caps;
-        gst_video_info_set_format (&info, GST_VIDEO_FORMAT_ARGB,300, 300);
-        video_caps = gst_video_info_to_caps (&info);
-        g_object_set (data.filesrc, "caps", video_caps, "format", GST_FORMAT_TIME, (char*)NULL);
+        GstCaps *caps = gst_caps_new_simple ("video/x-raw",
+                                             "format", G_TYPE_STRING, "ARGB",
+                                             "framerate", GST_TYPE_FRACTION, 30, 1,
+                                             "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
+                                             "width", G_TYPE_INT, 300,
+                                             "height", G_TYPE_INT, 300,
+                                             (char*)NULL);
 
-        g_object_set (G_OBJECT (data.filesrc),
+        g_object_set (data.appsrc, "caps", caps, "format", GST_FORMAT_TIME, (char*)NULL);
+
+        gst_caps_unref (caps);
+
+        g_object_set (G_OBJECT (data.appsrc),
                       "stream-type", 0,
+                      "emit-signals", FALSE,
                       "format", GST_FORMAT_TIME, (char*)NULL);
-        g_signal_connect (data.filesrc, "need-data", G_CALLBACK (NeedDataHandler), NULL);
+
+        //g_signal_connect (data.appsrc, "need-data", G_CALLBACK (NeedDataHandler), NULL);
+        //g_signal_connect (data.appsrc, "enough-data", G_CALLBACK (EnoughDataHandler), NULL/*&data*/);
+
+        GstPlay();
+
     }
 }
 
@@ -130,14 +116,12 @@ void GstDisplay::DisposePipeline() {
 
         data.pipeline = NULL;
 
-        data.filesrc = NULL;
-        data.decodebin = NULL;
-        data.audioconvert = NULL;
+        data.appsrc = NULL;
+        data.identity = NULL;
+        data.videoconvert = NULL;
         data.videosink = NULL;
 
         data.pOwner = NULL;
-
-        busWatchId = -1;
     }
 }
 
@@ -172,6 +156,41 @@ void GstDisplay::ChangeStateSync(GstState stateNew) {
                 qWarning() << "Error: cannot change state!";
             }
         }
+    }
+}
+
+
+
+//--------------------------------------------------------------------------
+void GstDisplay::PushFrame(QImage image) {
+
+    //
+    // TODO: Controlli
+    //
+
+    GstBuffer *buffer;
+    GstFlowReturn ret;
+    GstMapInfo map;
+
+    // Create a new empty buffer
+    buffer = gst_buffer_new_allocate  (NULL, 300*300*4, NULL);
+
+    if(gst_buffer_map (buffer, &map, GST_MAP_WRITE)) {
+
+        memset (map.data, 0xff, map.size); // All white --> ok
+        memcpy (map.data, image.bits(), map.size);
+    }
+
+    // Push the buffer into the appsrc
+    g_signal_emit_by_name (data.appsrc, "push-buffer", buffer, &ret);
+
+    // Free the buffer now that we are done with it
+    gst_buffer_unmap (buffer, &map);
+    gst_buffer_unref (buffer);
+
+    // We got some error, stop sending data
+    if (ret != GST_FLOW_OK) {
+        qDebug() << "GST_FLOW Error!" << ret;
     }
 }
 
@@ -230,11 +249,50 @@ void GstDisplay::GstPause(bool sync) {
 //-------------------------------------------------------------------------------------------------
 void GstDisplay::OnPainted(QImage image) {
 
-    this->image = image;
-
-    // Da migliorare
-    image_ptr = &this->image;
-    GstPlay();
-
-    qDebug() << this->image;
+    PushFrame(image);
 }
+
+
+
+
+
+
+
+
+/*
+//-------------------------------------------------------------------------------------------------
+static void EnoughDataHandler (GstElement *appsrc) {
+
+    qDebug() << __PRETTY_FUNCTION__;
+    Q_UNUSED(appsrc);
+}
+
+//-------------------------------------------------------------------------------------------------
+static void NeedDataHandler (GstElement *appsrc) {
+
+    qDebug() << __PRETTY_FUNCTION__;
+
+    GstBuffer *buffer;
+    GstFlowReturn ret;
+    GstMapInfo map;
+
+    //Create a new empty buffer
+    buffer = gst_buffer_new_and_alloc (300*300*3);
+    gst_buffer_map (buffer, &map, GST_MAP_WRITE);
+
+    //Generate some psychodelic waveforms
+    //...
+
+    //Push the buffer into the appsrc
+    g_signal_emit_by_name (appsrc, "push-buffer", buffer, &ret);
+
+    //Free the buffer now that we are done with it
+    gst_buffer_unmap (buffer, &map);
+    gst_buffer_unref (buffer);
+
+    if (ret != GST_FLOW_OK) {
+        // We got some error, stop sending data
+        qDebug() << "Error!";
+    }
+}
+*/

@@ -17,12 +17,14 @@ class GstDisplay;
 typedef struct {
     GstElement* pipeline;
 
-    GstElement* filesrc;
-    GstElement* decodebin;
-    GstElement* audioconvert;
+    GstElement* appsrc;
+    GstElement* identity;
+    GstElement* videoconvert;
     GstElement* videosink;
 
     GstDisplay* pOwner;
+
+    GMainLoop *main_loop;  /* GLib's Main Loop */
 
 } GstAudioPlayerData;
 
@@ -40,9 +42,6 @@ public:
     void InstantiatePipeline();
     void DisposePipeline();
 
-    void ChangeStateAsync(GstState stateNew);
-    void ChangeStateSync(GstState stateNew);
-
     GstState GetState();
 
     void GstPlay(bool sync = false);
@@ -53,10 +52,13 @@ public slots:
     void OnPainted(QImage image);
 
 private:
-    GstAudioPlayerData data;
-    guint busWatchId;
+    void ChangeStateAsync(GstState stateNew);
+    void ChangeStateSync(GstState stateNew);
 
-    QImage image;
+    void PushFrame(QImage image);
+
+    GstAudioPlayerData data;
+
 };
 
 
