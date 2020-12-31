@@ -3,6 +3,7 @@
 
 #include <QDebug>
 #include <QPaintEvent>
+#include <QImage>
 
 //-------------------------------------------------------------------------------------------------
 PaintEventFilter::PaintEventFilter(QObject *parent, QWidget* sourceWidget) : QObject(parent), sourceWidget(sourceWidget) {
@@ -14,7 +15,7 @@ bool PaintEventFilter::eventFilter(QObject* obj, QEvent* event) {
 
     if (event->type() == QEvent::Paint) {
         if (sourceWidget != nullptr) {
-            emit painted(sourceWidget->grab().toImage());
+            emit painted(sourceWidget->grab().toImage().convertToFormat(QImage::Format_RGB888));
         }
         return true;
 

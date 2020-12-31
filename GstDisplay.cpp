@@ -79,7 +79,7 @@ void GstDisplay::InstantiatePipeline() {
 
         /* setup appsrc */
         GstCaps *caps = gst_caps_new_simple ("video/x-raw",
-                                             "format", G_TYPE_STRING, "ARGB",
+                                             "format", G_TYPE_STRING, "RGB",
                                              "framerate", GST_TYPE_FRACTION, 30, 1,
                                              "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
                                              "width", G_TYPE_INT, 300,
@@ -173,11 +173,11 @@ void GstDisplay::PushFrame(QImage image) {
     GstMapInfo map;
 
     // Create a new empty buffer
-    buffer = gst_buffer_new_allocate  (NULL, 300*300*4, NULL);
+    buffer = gst_buffer_new_allocate  (NULL, 300*300*3, NULL);
 
     if(gst_buffer_map (buffer, &map, GST_MAP_WRITE)) {
 
-        memset (map.data, 0xff, map.size); // All white --> ok
+        //memset (map.data, 0xff, map.size); // All white --> ok
         memcpy (map.data, image.bits(), map.size);
     }
 
@@ -248,6 +248,8 @@ void GstDisplay::GstPause(bool sync) {
 
 //-------------------------------------------------------------------------------------------------
 void GstDisplay::OnPainted(QImage image) {
+
+    qDebug() << image;
 
     PushFrame(image);
 }
