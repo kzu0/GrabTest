@@ -32,11 +32,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->setupUi(this);
     ui->renderLabel->setScaledContents(true);
 
-    paintEventFilter = new PaintEventFilter(this, ui->sourceWidget);
-    connect(paintEventFilter, SIGNAL(painted(QImage)), this, SLOT(OnPainted(QImage)));
-
     gstDisplay = new GstDisplay(this);
-    gstDisplay->InstantiatePipeline();
+
+    paintEventFilter = new PaintEventFilter(this, ui->sourceWidget);
+
+    connect(paintEventFilter, SIGNAL(painted(QImage)), this, SLOT(OnPainted(QImage)));
     connect(paintEventFilter, SIGNAL(painted(QImage)), gstDisplay, SLOT(OnPainted(QImage)));
 
     ui->sourceFrame->installEventFilter(paintEventFilter);

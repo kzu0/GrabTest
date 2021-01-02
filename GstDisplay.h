@@ -18,7 +18,7 @@ typedef struct {
     GstElement* pipeline;
 
     GstElement* appsrc;
-    GstElement* identity;
+    GstElement* queue;
     GstElement* videoconvert;
     GstElement* videosink;
 
@@ -42,6 +42,10 @@ public:
     void InstantiatePipeline();
     void DisposePipeline();
 
+    void SetWidth(int width);
+    void SetHeight(int height);
+    void SetDepth(int depth);
+
     GstState GetState();
 
     void GstPlay(bool sync = false);
@@ -58,6 +62,10 @@ private:
     void PushFrame(QImage image);
 
     GstAudioPlayerData data;
+
+    int width;
+    int height;
+    int depth;
 
 };
 

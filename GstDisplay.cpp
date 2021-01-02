@@ -30,10 +30,14 @@ static void ChangeStateHandler (GstElement* pipeline, GstState* stateNewPtr) {
 //-------------------------------------------------------------------------------------------------
 GstDisplay::GstDisplay(QObject *parent) : QObject(parent) {
 
+    width = 0;
+    height = 0;
+    depth = 0;
+
     data.pipeline = NULL;
 
     data.appsrc = NULL;
-    data.identity = NULL;
+    data.queue = NULL;
     data.videoconvert = NULL;
     data.videosink = NULL;
 
@@ -58,48 +62,41 @@ void GstDisplay::InstantiatePipeline() {
         data.pipeline = gst_pipeline_new ("pipeline");
 
         data.appsrc = gst_element_factory_make("appsrc", NULL);
-        data.identity = gst_element_factory_make("queue", NULL);
+        data.queue = gst_element_factory_make("queue", NULL);
         data.videoconvert = gst_element_factory_make("videoconvert", NULL);
         data.videosink = gst_element_factory_make("autovideosink", NULL);
 
-        if (!data.pipeline || !data.appsrc || !data.identity || !data.videoconvert || !data.videosink) {
+        if (!data.pipeline || !data.appsrc || !data.queue || !data.videoconvert || !data.videosink) {
             qWarning() << "Not all elements could be created!";
             DisposePipeline();
             return;
         }
 
-        gst_bin_add_many (GST_BIN(data.pipeline), data.appsrc, data.identity, data.videoconvert, data.videosink, (char*)NULL);
+        gst_bin_add_many (GST_BIN(data.pipeline), data.appsrc, data.queue, data.videoconvert, data.videosink, (char*)NULL);
 
         // Link the pipeline
-        if (!gst_element_link_many (data.appsrc, data.identity, data.videoconvert, data.videosink, (char*)NULL)) {
+        if (!gst_element_link_many (data.appsrc, data.queue, data.videoconvert, data.videosink, (char*)NULL)) {
             qWarning() << "Error: not all elements could be linked!";
             DisposePipeline();
             return;
         }
 
-        /* setup appsrc */
+        // Setup appsrc
         GstCaps *caps = gst_caps_new_simple ("video/x-raw",
                                              "format", G_TYPE_STRING, "RGB",
                                              "framerate", GST_TYPE_FRACTION, 30, 1,
                                              "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
-                                             "width", G_TYPE_INT, 300,
-                                             "height", G_TYPE_INT, 300,
+                                             "width", G_TYPE_INT, width,
+                                             "height", G_TYPE_INT, height,
                                              (char*)NULL);
-
-        g_object_set (data.appsrc, "caps", caps, "format", GST_FORMAT_TIME, (char*)NULL);
-
-        gst_caps_unref (caps);
 
         g_object_set (G_OBJECT (data.appsrc),
                       "stream-type", 0,
                       "emit-signals", FALSE,
+                      "caps", caps,
                       "format", GST_FORMAT_TIME, (char*)NULL);
 
-        //g_signal_connect (data.appsrc, "need-data", G_CALLBACK (NeedDataHandler), NULL);
-        //g_signal_connect (data.appsrc, "enough-data", G_CALLBACK (EnoughDataHandler), NULL/*&data*/);
-
-        GstPlay();
-
+        gst_caps_unref (caps);
     }
 }
 
@@ -114,15 +111,43 @@ void GstDisplay::DisposePipeline() {
 
         gst_object_unref (data.pipeline);
 
+        width = 0;
+        height = 0;
+        depth = 0;
+
         data.pipeline = NULL;
 
         data.appsrc = NULL;
-        data.identity = NULL;
+        data.queue = NULL;
         data.videoconvert = NULL;
         data.videosink = NULL;
 
         data.pOwner = NULL;
     }
+}
+
+
+
+//--------------------------------------------------------------------------
+void GstDisplay::SetWidth(int width) {
+
+    this->width = width;
+}
+
+
+
+//--------------------------------------------------------------------------
+void GstDisplay::SetHeight(int height) {
+
+    this->height = height;
+}
+
+
+
+//--------------------------------------------------------------------------
+void GstDisplay::SetDepth(int depth) {
+
+    this->depth = depth;
 }
 
 
@@ -173,7 +198,7 @@ void GstDisplay::PushFrame(QImage image) {
     GstMapInfo map;
 
     // Create a new empty buffer
-    buffer = gst_buffer_new_allocate  (NULL, 300*300*3, NULL);
+    buffer = gst_buffer_new_allocate  (NULL, width*height*depth, NULL);
 
     if(gst_buffer_map (buffer, &map, GST_MAP_WRITE)) {
 
@@ -249,7 +274,17 @@ void GstDisplay::GstPause(bool sync) {
 //-------------------------------------------------------------------------------------------------
 void GstDisplay::OnPainted(QImage image) {
 
-    qDebug() << image;
+    if(data.pipeline == NULL) {
+        SetWidth(image.width());
+        SetHeight(image.height());
+        SetDepth(3);
+        InstantiatePipeline();
+        GstPlay();
+    }
+
+    if ((image.width() != width) or (image.height() != height)) {
+        // ...
+    }
 
     PushFrame(image);
 }
