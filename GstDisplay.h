@@ -37,12 +37,8 @@ public:
     explicit GstDisplay(QObject *parent = nullptr);
     ~GstDisplay();
 
-    void InstantiatePipeline();
+    void InstantiatePipeline(QSize size);
     void DisposePipeline();
-
-    void SetWidth(int width);
-    void SetHeight(int height);
-    void SetDepth(int depth);
 
     GstState GetState();
 
@@ -58,14 +54,11 @@ private:
     void ChangeStateAsync(GstState stateNew);
     void ChangeStateSync(GstState stateNew);
 
+    void SetupAppsrc(QSize size);
+
     void PushFrame(QImage image);
 
     GstAudioPlayerData data;
-
-    int width;
-    int height;
-    int depth;
-
 };
 
 

@@ -30,10 +30,6 @@ static void ChangeStateHandler (GstElement* pipeline, GstState* stateNewPtr) {
 //-------------------------------------------------------------------------------------------------
 GstDisplay::GstDisplay(QObject *parent) : QObject(parent) {
 
-    width = 0;
-    height = 0;
-    depth = 0;
-
     data.pipeline = NULL;
 
     data.appsrc = NULL;
@@ -55,7 +51,7 @@ GstDisplay::~GstDisplay() {
 
 
 //--------------------------------------------------------------------------
-void GstDisplay::InstantiatePipeline() {
+void GstDisplay::InstantiatePipeline(QSize size) {
 
     if(data.pipeline == NULL) {
 
@@ -81,22 +77,7 @@ void GstDisplay::InstantiatePipeline() {
             return;
         }
 
-        // Setup appsrc
-        GstCaps *caps = gst_caps_new_simple ("video/x-raw",
-                                             "format", G_TYPE_STRING, "RGB",
-                                             "framerate", GST_TYPE_FRACTION, 30, 1,
-                                             "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
-                                             "width", G_TYPE_INT, width,
-                                             "height", G_TYPE_INT, height,
-                                             (char*)NULL);
-
-        g_object_set (G_OBJECT (data.appsrc),
-                      "stream-type", 0,
-                      "emit-signals", FALSE,
-                      "caps", caps,
-                      "format", GST_FORMAT_TIME, (char*)NULL);
-
-        gst_caps_unref (caps);
+        SetupAppsrc(size);
     }
 }
 
@@ -111,10 +92,6 @@ void GstDisplay::DisposePipeline() {
 
         gst_object_unref (data.pipeline);
 
-        width = 0;
-        height = 0;
-        depth = 0;
-
         data.pipeline = NULL;
 
         data.appsrc = NULL;
@@ -127,28 +104,6 @@ void GstDisplay::DisposePipeline() {
 }
 
 
-
-//--------------------------------------------------------------------------
-void GstDisplay::SetWidth(int width) {
-
-    this->width = width;
-}
-
-
-
-//--------------------------------------------------------------------------
-void GstDisplay::SetHeight(int height) {
-
-    this->height = height;
-}
-
-
-
-//--------------------------------------------------------------------------
-void GstDisplay::SetDepth(int depth) {
-
-    this->depth = depth;
-}
 
 
 
@@ -187,35 +142,61 @@ void GstDisplay::ChangeStateSync(GstState stateNew) {
 
 
 //--------------------------------------------------------------------------
+void GstDisplay::SetupAppsrc(QSize size) {
+
+    if(data.pipeline != NULL) {
+
+        GstCaps *caps = gst_caps_new_simple ("video/x-raw",
+                                             "format", G_TYPE_STRING, "RGB",
+                                             "framerate", GST_TYPE_FRACTION, 30, 1,
+                                             "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
+                                             "width", G_TYPE_INT, size.width(),
+                                             "height", G_TYPE_INT, size.height(),
+                                             (char*)NULL);
+
+        g_object_set (G_OBJECT (data.appsrc),
+                      "stream-type", 0,
+                      "emit-signals", FALSE,
+                      "caps", caps,
+                      "format", GST_FORMAT_TIME, (char*)NULL);
+
+        gst_caps_unref (caps);
+    }
+}
+
+
+
+//--------------------------------------------------------------------------
 void GstDisplay::PushFrame(QImage image) {
 
-    //
-    // TODO: Controlli
-    //
+    if(data.pipeline != NULL) {
 
-    GstBuffer *buffer;
-    GstFlowReturn ret;
-    GstMapInfo map;
+        GstBuffer *buffer;
+        GstFlowReturn ret;
+        GstMapInfo map;
 
-    // Create a new empty buffer
-    buffer = gst_buffer_new_allocate  (NULL, width*height*depth, NULL);
+        int depth = 3;
 
-    if(gst_buffer_map (buffer, &map, GST_MAP_WRITE)) {
+        // Create a new empty buffer
+        buffer = gst_buffer_new_allocate  (NULL, image.width()*image.height()*depth, NULL);
 
-        //memset (map.data, 0xff, map.size); // All white --> ok
-        memcpy (map.data, image.bits(), map.size);
-    }
+        if(gst_buffer_map (buffer, &map, GST_MAP_WRITE)) {
 
-    // Push the buffer into the appsrc
-    g_signal_emit_by_name (data.appsrc, "push-buffer", buffer, &ret);
+            //memset (map.data, 0xff, map.size); // All white --> ok
+            memcpy (map.data, image.bits(), map.size);
+        }
 
-    // Free the buffer now that we are done with it
-    gst_buffer_unmap (buffer, &map);
-    gst_buffer_unref (buffer);
+        // Push the buffer into the appsrc
+        g_signal_emit_by_name (data.appsrc, "push-buffer", buffer, &ret);
 
-    // We got some error, stop sending data
-    if (ret != GST_FLOW_OK) {
-        qDebug() << "GST_FLOW Error!" << ret;
+        // Free the buffer now that we are done with it
+        gst_buffer_unmap (buffer, &map);
+        gst_buffer_unref (buffer);
+
+        // We got some error, stop sending data
+        if (ret != GST_FLOW_OK) {
+            qDebug() << "GST_FLOW Error!" << ret;
+        }
     }
 }
 
@@ -277,18 +258,9 @@ void GstDisplay::OnPainted(QImage image) {
     qDebug() << image;
 
     if(data.pipeline == NULL) {
-        SetWidth(image.width());
-        SetHeight(image.height());
-        SetDepth(3);
-        InstantiatePipeline();
+        InstantiatePipeline(image.size());
         GstPlay();
     }
-
-    /*
-    if ((image.width() != width) or (image.height() != height)) {
-        // ...
-    }
-    */
 
     PushFrame(image);
 }
@@ -301,59 +273,37 @@ void GstDisplay::OnResized(QSize size) {
     qDebug() << size;
 
     /*
+    if(data.pipeline == NULL) {
+        InstantiatePipeline();
+    }
+
     GstStop(true);
+
     SetWidth(size.width());
     SetHeight(size.height());
     SetDepth(3);
-    InstantiatePipeline();
+
+    // Setup appsrc
+    GstCaps *caps = gst_caps_new_simple ("video/x-raw",
+                                         "format", G_TYPE_STRING, "RGB",
+                                         "framerate", GST_TYPE_FRACTION, 30, 1,
+                                         "pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
+                                         "width", G_TYPE_INT, width,
+                                         "height", G_TYPE_INT, height,
+                                         (char*)NULL);
+
+    g_object_set (G_OBJECT (data.appsrc),
+                  "stream-type", 0,
+                  "emit-signals", FALSE,
+                  "caps", caps,
+                  "format", GST_FORMAT_TIME, (char*)NULL);
+
+    gst_caps_unref (caps);
+
     GstPlay(true);
     */
-
 
     Q_UNUSED(size);
 }
 
 
-
-
-
-
-
-
-/*
-//-------------------------------------------------------------------------------------------------
-static void EnoughDataHandler (GstElement *appsrc) {
-
-    qDebug() << __PRETTY_FUNCTION__;
-    Q_UNUSED(appsrc);
-}
-
-//-------------------------------------------------------------------------------------------------
-static void NeedDataHandler (GstElement *appsrc) {
-
-    qDebug() << __PRETTY_FUNCTION__;
-
-    GstBuffer *buffer;
-    GstFlowReturn ret;
-    GstMapInfo map;
-
-    //Create a new empty buffer
-    buffer = gst_buffer_new_and_alloc (300*300*3);
-    gst_buffer_map (buffer, &map, GST_MAP_WRITE);
-
-    //Generate some psychodelic waveforms
-    //...
-
-    //Push the buffer into the appsrc
-    g_signal_emit_by_name (appsrc, "push-buffer", buffer, &ret);
-
-    //Free the buffer now that we are done with it
-    gst_buffer_unmap (buffer, &map);
-    gst_buffer_unref (buffer);
-
-    if (ret != GST_FLOW_OK) {
-        // We got some error, stop sending data
-        qDebug() << "Error!";
-    }
-}
-*/
