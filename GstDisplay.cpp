@@ -274,6 +274,8 @@ void GstDisplay::GstPause(bool sync) {
 //-------------------------------------------------------------------------------------------------
 void GstDisplay::OnPainted(QImage image) {
 
+    qDebug() << image;
+
     if(data.pipeline == NULL) {
         SetWidth(image.width());
         SetHeight(image.height());
@@ -282,11 +284,33 @@ void GstDisplay::OnPainted(QImage image) {
         GstPlay();
     }
 
+    /*
     if ((image.width() != width) or (image.height() != height)) {
         // ...
     }
+    */
 
     PushFrame(image);
+}
+
+
+
+//-------------------------------------------------------------------------------------------------
+void GstDisplay::OnResized(QSize size) {
+
+    qDebug() << size;
+
+    /*
+    GstStop(true);
+    SetWidth(size.width());
+    SetHeight(size.height());
+    SetDepth(3);
+    InstantiatePipeline();
+    GstPlay(true);
+    */
+
+
+    Q_UNUSED(size);
 }
 
 

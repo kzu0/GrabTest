@@ -13,15 +13,23 @@ PaintEventFilter::PaintEventFilter(QObject *parent, QWidget* sourceWidget) : QOb
 //-------------------------------------------------------------------------------------------------
 bool PaintEventFilter::eventFilter(QObject* obj, QEvent* event) {
 
-    if (event->type() == QEvent::Paint) {
+    switch(event->type()) {
+
+    case QEvent::Paint:
         if (sourceWidget != nullptr) {
             emit painted(sourceWidget->grab().toImage().convertToFormat(QImage::Format_RGB888));
         }
         return true;
+        break;
 
-    } else {
+    case QEvent::Resize:
+        if (sourceWidget != nullptr) {
+            emit resized(QSize(sourceWidget->width(), sourceWidget->height()));
+        }
+        return true;
+        break;
 
-        // Standard event processing
+    default:
         return QObject::eventFilter(obj, event);
     }
 }
@@ -38,6 +46,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     connect(paintEventFilter, SIGNAL(painted(QImage)), this, SLOT(OnPainted(QImage)));
     connect(paintEventFilter, SIGNAL(painted(QImage)), gstDisplay, SLOT(OnPainted(QImage)));
+    connect(paintEventFilter, SIGNAL(resized(QSize)), gstDisplay, SLOT(OnResized(QSize)));
 
     ui->sourceFrame->installEventFilter(paintEventFilter);
 }

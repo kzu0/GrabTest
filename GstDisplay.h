@@ -24,8 +24,6 @@ typedef struct {
 
     GstDisplay* pOwner;
 
-    GMainLoop *main_loop;  /* GLib's Main Loop */
-
 } GstAudioPlayerData;
 
 
@@ -54,6 +52,7 @@ public:
 
 public slots:
     void OnPainted(QImage image);
+    void OnResized(QSize size);
 
 private:
     void ChangeStateAsync(GstState stateNew);
