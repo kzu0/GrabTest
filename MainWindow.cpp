@@ -17,7 +17,12 @@ bool PaintEventFilter::eventFilter(QObject* obj, QEvent* event) {
 
     case QEvent::Paint:
         if (sourceWidget != nullptr) {
-            emit painted(sourceWidget->grab().toImage().convertToFormat(QImage::Format_RGB888));
+
+            QPixmap pixmap(sourceWidget->size());
+            sourceWidget->render(&pixmap, QPoint(), sourceWidget->childrenRegion());
+            emit painted(pixmap.toImage().convertToFormat(QImage::Format_RGB888));
+
+            // emit painted(sourceWidget->grab().toImage().convertToFormat(QImage::Format_RGB888));
         }
         return true;
         break;
